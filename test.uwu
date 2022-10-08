@@ -1,1 +1,1 @@
-rev xs :: x :: Nil
+let add a b = a + b in add 2 3

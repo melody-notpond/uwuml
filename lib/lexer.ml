@@ -9,7 +9,11 @@ type token_raw =
     | Percent
     | DoubleColon
     | LParen
-    | RParen;;
+    | RParen
+    | Let
+    | Rec
+    | In
+    | EqualSign;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 
 type lexer = {
@@ -55,6 +59,7 @@ let lex (l: lexer) =
                             helper s (MultilineComment 1) line col l
                         else Ok { filename = l.filename; line; col; token = LParen }
                     | ')'                           -> Ok { filename = l.filename; line; col; token = RParen }
+                    | '='                           -> Ok { filename = l.filename; line; col; token = EqualSign }
                     | '*'                           -> Ok { filename = l.filename; line; col; token = Star }
                     | '/'                           -> Ok { filename = l.filename; line; col; token = Slash }
                     | '+'                           -> Ok { filename = l.filename; line; col; token = Plus }
@@ -139,7 +144,16 @@ let lex (l: lexer) =
                     | _                                          ->
                         l.index <- l.index - 1;
                         l.col <- l.col - 1;
-                        Ok { filename = l.filename; line; col; token = Symbol s }
+                        match s with
+                        | "let" -> Ok { filename = l.filename; line; col; token = Let }
+                        | "rec" -> Ok { filename = l.filename; line; col; token = Rec }
+                        | "in"  -> Ok { filename = l.filename; line; col; token = In }
+                        | s     -> Ok { filename = l.filename; line; col; token = Symbol s }
                 end
     in helper "" Start l.line l.col l;;
 
+let peek (l: lexer) =
+    let state = push_lexer l in
+    let token = lex l in
+    let () = pop_lexer l state in
+    token;;

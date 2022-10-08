@@ -5,6 +5,7 @@ type ast_raw =
     | Symbol of string
     | BinOp of bin_op * ast * ast
     | Call of ast * ast list
+    | Let of bool * string * string list * ast * ast option
 and ast = { filename: string; line: int; col: int; ast: ast_raw };;
 
 let print_ast =
@@ -37,6 +38,14 @@ let print_ast =
             print_string "call\n";
             helper (indentation + 1) f;
             List.iter (helper (indentation + 1)) args;
+        | Let (recursive, name, args, value, context) ->
+            Printf.printf "let%s %s" (if recursive then " rec" else "") name;
+            List.iter (Printf.printf " %s") args;
+            print_newline ();
+            helper (indentation + 1) value;
+            match context with
+            | Some context -> helper (indentation + 1) context;
+            | None         -> ()
     in helper 0;;
 
 let parse_linfix ops next l =
@@ -113,8 +122,61 @@ let parse_rinfix ops next l =
     | Ok v -> helper [v] [] l
     | Error e -> Error e;;
 
-let rec parse_value l =
-    match Lexer.lex l with
+let rec parse_let l =
+    let state = Lexer.push_lexer l in
+        match Lexer.lex l with
+        | Ok { filename; line; col; token = Lexer.Let } ->
+            let recursive = match Lexer.peek l with
+                            | Ok { token = Lexer.Rec; _ } ->
+                                let _ = Lexer.lex l in
+                                true
+                            | _ -> false
+            in begin
+                match Lexer.lex l with
+                | Ok { token = Lexer.Symbol var; _ } ->
+                    let rec helper l args =
+                        match Lexer.peek l with
+                        | Ok { token = Lexer.Symbol s; _ } ->
+                            let _ = Lexer.lex l in
+                                helper l (s :: args)
+                        | _ -> List.rev args
+                    in let args = helper l [] in begin
+                        match Lexer.lex l with
+                        | Ok { token = EqualSign; _ } ->
+                            begin
+                                match parse_top l with
+                                | Ok value ->
+                                    begin
+                                        match Lexer.peek l with
+                                        | Ok { token = Lexer.In; _ } ->
+                                            let _ = Lexer.lex l in
+                                            begin
+                                                match parse_top l with
+                                                | Ok context -> Ok { filename; line; col; ast = Let (recursive, var, args, value, Some context) }
+                                                | Error e ->
+                                                    Lexer.pop_lexer l state;
+                                                    Error e
+                                            end
+                                        | _ -> Ok { filename; line; col; ast = Let (recursive, var, args, value, None) }
+                                    end
+                                | Error e -> Error e
+                            end
+                        | _ ->
+                            Lexer.pop_lexer l state;
+                            Error "invalid let"
+                    end
+                | _ ->
+                    Lexer.pop_lexer l state;
+                    Error "invalid let"
+            end
+        | _ ->
+            Lexer.pop_lexer l state;
+            Error "invalid let"
+
+and parse_value l =
+    match parse_let l with
+    | Ok v -> Ok v
+    | Error _ -> match Lexer.lex l with
     | Ok { filename; line; col; token = Lexer.Float f }  -> Ok { filename; line; col; ast = Float f }
     | Ok { filename; line; col; token = Lexer.Symbol s } -> Ok { filename; line; col; ast = Symbol s }
     | Ok { token = Lexer.LParen; _ }                     ->
@@ -154,7 +216,8 @@ and parse_call l =
 
 and parse_mult l = parse_linfix [Lexer.Star; Lexer.Slash; Lexer.Percent] parse_call l
 and parse_add l = parse_linfix [Lexer.Plus; Lexer.Minus] parse_mult l
-and parse_cons l = parse_rinfix [Lexer.DoubleColon] parse_add l;;
+and parse_cons l = parse_rinfix [Lexer.DoubleColon] parse_add l
+and parse_top l = parse_cons l;;
 
 let parse filename contents =
     let l = Lexer.create_lexer filename contents
