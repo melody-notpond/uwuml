@@ -3,6 +3,7 @@ type ast_raw =
     | Float of float
     | Symbol of string
     | BinOp of bin_op * ast * ast
+    | Call of ast * ast list
 and ast = { filename: string; line: int; col: int; ast: ast_raw };;
 
 val print_ast : ast -> unit;;

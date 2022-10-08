@@ -4,6 +4,7 @@ type ast_raw =
     | Float of float
     | Symbol of string
     | BinOp of bin_op * ast * ast
+    | Call of ast * ast list
 and ast = { filename: string; line: int; col: int; ast: ast_raw };;
 
 let print_ast =
@@ -32,6 +33,10 @@ let print_ast =
             print_newline ();
             helper (indentation + 1) a;
             helper (indentation + 1) b;
+        | Call (f, args)   ->
+            print_string "call\n";
+            helper (indentation + 1) f;
+            List.iter (helper (indentation + 1)) args;
     in helper 0;;
 
 let parse_linfix ops next l =
@@ -127,7 +132,27 @@ let rec parse_value l =
     | Ok _                                              -> Error "oh no"
     | Error e                                           -> Error e
 
-and parse_mult l = parse_linfix [Lexer.Star; Lexer.Slash; Lexer.Percent] parse_value l
+and parse_call l =
+    let state = Lexer.push_lexer l in
+        match parse_value l with
+        | Ok v    ->
+            let rec helper a l =
+                let state = Lexer.push_lexer l in
+                match parse_value l with
+                | Ok v    -> helper (v :: a) l
+                | Error _ ->
+                    Lexer.pop_lexer l state;
+                    List.rev a
+            in begin
+                match helper [] l with
+                | [] -> Ok v
+                | l  -> Ok ({ filename = v.filename; line = v.line; col = v.col; ast = Call (v, l) })
+            end
+        | Error e ->
+            Lexer.pop_lexer l state;
+            Error e
+
+and parse_mult l = parse_linfix [Lexer.Star; Lexer.Slash; Lexer.Percent] parse_call l
 and parse_add l = parse_linfix [Lexer.Plus; Lexer.Minus] parse_mult l
 and parse_cons l = parse_rinfix [Lexer.DoubleColon] parse_add l;;
 
