@@ -29,7 +29,8 @@ let print_ast =
     in helper 0;;
 
 let parse filename contents =
-    let l = Lexer.create_lexer contents in
+    let l = Lexer.create_lexer filename contents in
         match Lexer.lex l with
-        | Ok (Lexer.Float f) -> Ok { filename; line = 0; col = 0; ast = Float f }
-        | Error e -> Error e;;
+        | Ok { filename; line; col; token = Lexer.Float f } -> Ok { filename; line; col; ast = Float f }
+        | Ok _                                              -> Error "oh no"
+        | Error e                                           -> Error e;;

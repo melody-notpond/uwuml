@@ -2,7 +2,7 @@ let filename = Sys.argv.(1);;
 let file = open_in filename;;
 let rec read_file file contents =
     try
-        read_file file (contents ^ input_line file)
+        read_file file (contents ^ input_line file ^ "\n")
     with _ ->
         close_in_noerr file;
         contents;;
