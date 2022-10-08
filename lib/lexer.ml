@@ -1,6 +1,14 @@
 type token_raw =
     Eof
-    | Float of float;;
+    | Float of float
+    | Star
+    | Slash
+    | Plus
+    | Minus
+    | Percent
+    | DoubleColon
+    | LParen
+    | RParen;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 
 type lexer = {
@@ -11,11 +19,23 @@ type lexer = {
     mutable col: int;
 };;
 
+type lexer_state = {
+    index: int;
+    line: int;
+    col: int;
+};;
+
 let create_lexer filename contents = { contents; filename; index = 0; line = 1; col = 0 };;
+let push_lexer (l: lexer) = { index = l.index; line = l.line; col = l.col };;
+let pop_lexer (l: lexer) state =
+    l.index <- state.index;
+    l.line <- state.line;
+    l.col <- state.col;
+    ();;
 
 type state = Start | MultilineComment of int | FloatTop | FloatPastDot | FloatPastEe | FloatPastEeFirst;;
 
-let lex l =
+let lex (l: lexer) =
     let rec helper s state line col l =
         let c = if String.length l.contents <= l.index then
                 char_of_int 0
@@ -31,7 +51,18 @@ let lex l =
                         if String.length l.contents > l.index && l.contents.[l.index] == '*' then
                             let _ = l.index <- l.index + 1 in
                             helper s (MultilineComment 1) line col l
-                        else Error "invalid character"
+                        else Ok { filename = l.filename; line; col; token = LParen }
+                    | ')'               -> Ok { filename = l.filename; line; col; token = RParen }
+                    | '*'               -> Ok { filename = l.filename; line; col; token = Star }
+                    | '/'               -> Ok { filename = l.filename; line; col; token = Slash }
+                    | '+'               -> Ok { filename = l.filename; line; col; token = Plus }
+                    | '-'               -> Ok { filename = l.filename; line; col; token = Minus }
+                    | '%'               -> Ok { filename = l.filename; line; col; token = Percent }
+                    | ':'               ->
+                        if String.length l.contents > l.index && l.contents.[l.index] == ':' then
+                            let _ = l.index <- l.index + 1 in
+                            Ok { filename = l.filename; line; col; token = DoubleColon }
+                        else Error "invalid token"
                     | ' ' | '\t' | '\r' -> helper s Start l.line l.col l
                     | '\n'              ->
                         l.line <- l.line + 1;
