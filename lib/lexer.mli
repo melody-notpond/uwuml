@@ -1,6 +1,7 @@
 type token_raw =
     Eof
     | Float of float
+    | Symbol of string
     | Star
     | Slash
     | Plus

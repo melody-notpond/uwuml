@@ -1,6 +1,7 @@
 type token_raw =
     Eof
     | Float of float
+    | Symbol of string
     | Star
     | Slash
     | Plus
@@ -33,7 +34,7 @@ let pop_lexer (l: lexer) state =
     l.col <- state.col;
     ();;
 
-type state = Start | MultilineComment of int | FloatTop | FloatPastDot | FloatPastEe | FloatPastEeFirst;;
+type state = Start | MultilineComment of int | FloatTop | FloatPastDot | FloatPastEe | FloatPastEeFirst | Symbol;;
 
 let lex (l: lexer) =
     let rec helper s state line col l =
@@ -46,29 +47,30 @@ let lex (l: lexer) =
             | Start ->
                 begin
                     match c with
-                    | '0' .. '9'        -> helper (s ^ String.make 1 c) FloatTop line col l
-                    | '('               ->
+                    | '0' .. '9'                    -> helper (s ^ String.make 1 c) FloatTop line col l
+                    | 'a' .. 'z' | 'A' .. 'Z' | '_' -> helper (s ^ String.make 1 c) Symbol line col l
+                    | '('                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == '*' then
                             let _ = l.index <- l.index + 1 in
                             helper s (MultilineComment 1) line col l
                         else Ok { filename = l.filename; line; col; token = LParen }
-                    | ')'               -> Ok { filename = l.filename; line; col; token = RParen }
-                    | '*'               -> Ok { filename = l.filename; line; col; token = Star }
-                    | '/'               -> Ok { filename = l.filename; line; col; token = Slash }
-                    | '+'               -> Ok { filename = l.filename; line; col; token = Plus }
-                    | '-'               -> Ok { filename = l.filename; line; col; token = Minus }
-                    | '%'               -> Ok { filename = l.filename; line; col; token = Percent }
-                    | ':'               ->
+                    | ')'                           -> Ok { filename = l.filename; line; col; token = RParen }
+                    | '*'                           -> Ok { filename = l.filename; line; col; token = Star }
+                    | '/'                           -> Ok { filename = l.filename; line; col; token = Slash }
+                    | '+'                           -> Ok { filename = l.filename; line; col; token = Plus }
+                    | '-'                           -> Ok { filename = l.filename; line; col; token = Minus }
+                    | '%'                           -> Ok { filename = l.filename; line; col; token = Percent }
+                    | ':'                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == ':' then
                             let _ = l.index <- l.index + 1 in
                             Ok { filename = l.filename; line; col; token = DoubleColon }
                         else Error "invalid token"
-                    | ' ' | '\t' | '\r' -> helper s Start l.line l.col l
-                    | '\n'              ->
+                    | ' ' | '\t' | '\r'             -> helper s Start l.line l.col l
+                    | '\n'                          ->
                         l.line <- l.line + 1;
                         l.col <- 0;
                         helper s Start l.line l.col l
-                    | _                 ->
+                    | _                             ->
                         if c == char_of_int 0 then
                             Ok { filename = l.filename; line; col; token = Eof }
                         else Error "invalid character"
@@ -129,6 +131,15 @@ let lex (l: lexer) =
                         l.index <- l.index - 1;
                         l.col <- l.col - 1;
                         Ok { filename = l.filename; line; col; token = Float (float_of_string s) }
+                end
+            | Symbol          ->
+                begin
+                    match c with
+                    | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> helper (s ^ String.make 1 c) Symbol line col l
+                    | _                                          ->
+                        l.index <- l.index - 1;
+                        l.col <- l.col - 1;
+                        Ok { filename = l.filename; line; col; token = Symbol s }
                 end
     in helper "" Start l.line l.col l;;
 

@@ -2,6 +2,7 @@ type bin_op = Mul | Div | Add | Sub | Mod | Cons;;
 
 type ast_raw =
     | Float of float
+    | Symbol of string
     | BinOp of bin_op * ast * ast
 and ast = { filename: string; line: int; col: int; ast: ast_raw };;
 
@@ -14,6 +15,9 @@ let print_ast =
         match a.ast with
         | Float f          ->
             print_float f;
+            print_newline ();
+        | Symbol s         ->
+            print_string s;
             print_newline ();
         | BinOp (op, a, b) ->
             begin
@@ -106,8 +110,9 @@ let parse_rinfix ops next l =
 
 let rec parse_value l =
     match Lexer.lex l with
-    | Ok { filename; line; col; token = Lexer.Float f } -> Ok { filename; line; col; ast = Float f }
-    | Ok { token = Lexer.LParen; _ }                    ->
+    | Ok { filename; line; col; token = Lexer.Float f }  -> Ok { filename; line; col; ast = Float f }
+    | Ok { filename; line; col; token = Lexer.Symbol s } -> Ok { filename; line; col; ast = Symbol s }
+    | Ok { token = Lexer.LParen; _ }                     ->
         begin
             match parse_add l with
             | Ok v    ->
