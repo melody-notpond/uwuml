@@ -1,6 +1,7 @@
 type token_raw =
     Eof
     | Float of float
+    | Bool of bool
     | Symbol of string
     | Star
     | Slash
@@ -13,7 +14,10 @@ type token_raw =
     | Let
     | Rec
     | In
-    | EqualSign;;
+    | EqualSign
+    | If
+    | Then
+    | Else;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 type lexer;;
 type lexer_state;;

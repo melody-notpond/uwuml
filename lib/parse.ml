@@ -2,10 +2,12 @@ type bin_op = Mul | Div | Add | Sub | Mod | Cons;;
 
 type ast_raw =
     | Float of float
+    | Bool of bool
     | Symbol of string
     | BinOp of bin_op * ast * ast
     | Call of ast * ast list
     | Let of bool * string * string list * ast * ast option
+    | If of ast * ast * ast
 and ast = { filename: string; line: int; col: int; ast: ast_raw };;
 
 let print_ast =
@@ -18,6 +20,8 @@ let print_ast =
         | Float f          ->
             print_float f;
             print_newline ();
+        | Bool b           ->
+            print_string (if b then "true\n" else "false\n");
         | Symbol s         ->
             print_string s;
             print_newline ();
@@ -43,9 +47,16 @@ let print_ast =
             List.iter (Printf.printf " %s") args;
             print_newline ();
             helper (indentation + 1) value;
-            match context with
-            | Some context -> helper (indentation + 1) context;
-            | None         -> ()
+            begin
+                match context with
+                | Some context -> helper (indentation + 1) context;
+                | None         -> ()
+            end
+        | If (cond, theny, elsy) ->
+            print_string "if\n";
+            helper (indentation + 1) cond;
+            helper (indentation + 1) theny;
+            helper (indentation + 1) elsy;
     in helper 0;;
 
 let parse_linfix ops next l =
@@ -173,11 +184,54 @@ let rec parse_let l =
             Lexer.pop_lexer l state;
             Error "invalid let"
 
+and parse_if l =
+    let state = Lexer.push_lexer l in
+        match Lexer.lex l with
+        | Ok { filename; line; col; token = Lexer.If } ->
+            begin
+                match parse_top l with
+                | Ok cond ->
+                    begin
+                        match Lexer.lex l with
+                        | Ok { token = Lexer.Then; _ } ->
+                            begin
+                                match parse_top l with
+                                | Ok theny ->
+                                    begin
+                                        match Lexer.lex l with
+                                        | Ok { token = Lexer.Else; _ } ->
+                                            begin
+                                                match parse_top l with
+                                                | Ok elsy ->
+                                                        Ok { filename; line; col; ast = If (cond, theny, elsy) }
+                                                | Error e ->
+                                                    Lexer.pop_lexer l state;
+                                                    Error e
+                                            end
+                                        | _ ->
+                                            Lexer.pop_lexer l state;
+                                            Error "invalid if"
+                                    end
+                                | Error e ->
+                                    Lexer.pop_lexer l state;
+                                    Error e
+                            end
+                        | _ ->
+                            Lexer.pop_lexer l state;
+                            Error "invalid if"
+                    end
+                | Error e ->
+                    Lexer.pop_lexer l state;
+                    Error e
+            end
+        | _ ->
+            Lexer.pop_lexer l state;
+            Error "invalid if"
+
 and parse_value l =
-    match parse_let l with
-    | Ok v -> Ok v
-    | Error _ -> match Lexer.lex l with
+    match Lexer.lex l with
     | Ok { filename; line; col; token = Lexer.Float f }  -> Ok { filename; line; col; ast = Float f }
+    | Ok { filename; line; col; token = Lexer.Bool b }  -> Ok { filename; line; col; ast = Bool b }
     | Ok { filename; line; col; token = Lexer.Symbol s } -> Ok { filename; line; col; ast = Symbol s }
     | Ok { token = Lexer.LParen; _ }                     ->
         begin
@@ -217,8 +271,13 @@ and parse_call l =
 and parse_mult l = parse_linfix [Lexer.Star; Lexer.Slash; Lexer.Percent] parse_call l
 and parse_add l = parse_linfix [Lexer.Plus; Lexer.Minus] parse_mult l
 and parse_cons l = parse_rinfix [Lexer.DoubleColon] parse_add l
-and parse_top l = parse_cons l;;
+and parse_top l =
+    match parse_let l with
+    | Ok v -> Ok v
+    | Error _ -> match parse_if l with
+    | Ok v -> Ok v
+    | Error _ -> parse_cons l;;
 
 let parse filename contents =
     let l = Lexer.create_lexer filename contents
-    in parse_cons l;;
+    in parse_top l;;

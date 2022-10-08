@@ -1,6 +1,7 @@
 type token_raw =
     Eof
     | Float of float
+    | Bool of bool
     | Symbol of string
     | Star
     | Slash
@@ -13,7 +14,10 @@ type token_raw =
     | Let
     | Rec
     | In
-    | EqualSign;;
+    | EqualSign
+    | If
+    | Then
+    | Else;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 
 type lexer = {
@@ -145,10 +149,15 @@ let lex (l: lexer) =
                         l.index <- l.index - 1;
                         l.col <- l.col - 1;
                         match s with
-                        | "let" -> Ok { filename = l.filename; line; col; token = Let }
-                        | "rec" -> Ok { filename = l.filename; line; col; token = Rec }
-                        | "in"  -> Ok { filename = l.filename; line; col; token = In }
-                        | s     -> Ok { filename = l.filename; line; col; token = Symbol s }
+                        | "let"   -> Ok { filename = l.filename; line; col; token = Let }
+                        | "rec"   -> Ok { filename = l.filename; line; col; token = Rec }
+                        | "in"    -> Ok { filename = l.filename; line; col; token = In }
+                        | "if"    -> Ok { filename = l.filename; line; col; token = If }
+                        | "then"  -> Ok { filename = l.filename; line; col; token = Then }
+                        | "else"  -> Ok { filename = l.filename; line; col; token = Else }
+                        | "true"  -> Ok { filename = l.filename; line; col; token = Bool true }
+                        | "false" -> Ok { filename = l.filename; line; col; token = Bool false }
+                        | s       -> Ok { filename = l.filename; line; col; token = Symbol s }
                 end
     in helper "" Start l.line l.col l;;
 
