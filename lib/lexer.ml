@@ -8,7 +8,7 @@ type lexer = {
 
 let create_lexer contents = { contents; index = 0 };;
 
-type state = Start | FloatTop | FloatPastDot | FloatPastEe;;
+type state = Start | FloatTop | FloatPastDot | FloatPastEe | FloatPastEeFirst;;
 
 let lex =
     let rec helper s state l =
@@ -42,7 +42,13 @@ let lex =
             | FloatPastEe ->
                 begin
                     match c with
-                    | '0' .. '9' -> helper (s ^ String.make 1 c) FloatPastEe l
+                    | '0' .. '9' | '+' | '-' -> helper (s ^ String.make 1 c) FloatPastEeFirst l
+                    | _                      -> Error "invalid float"
+                end
+            | FloatPastEeFirst ->
+                begin
+                    match c with
+                    | '0' .. '9' -> helper (s ^ String.make 1 c) FloatPastEeFirst l
                     | _          -> Ok (Float (float_of_string s))
                 end
     in helper "" Start;;
