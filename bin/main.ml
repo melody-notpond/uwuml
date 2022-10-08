@@ -17,22 +17,3 @@ let a = match Parse.parse filename contents with
         exit 1;;
 Parse.print_ast a;;
 
-(*
-things in uwuml:
- - lists
- - booleans
- - adts
- - integers
- - tuples
- - strings
- - top type
- - nil type
- - let (rec) ... = ...
- - let (rec) ... = ... in ...
- - match ... with ... -> ... else with ... -> ... else -> ...
- - if ... then ... else ...
- - generics
- - basic typeclasses
- - type inference
-
- *)
