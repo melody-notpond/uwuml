@@ -1,4 +1,13 @@
 type bin_op = Mul | Div | Add | Sub | Mod | Cons;;
+type pattern_raw =
+    | Wildcard
+    | SymbolPat of string
+    | FloatPat of float
+    | BoolPat of bool
+    | ConsPat of pattern * pattern
+    | SumPat of string * pattern list
+    | ManyPat of pattern * pattern
+and pattern = { filename: string; line: int; col: int; pattern: pattern_raw };;
 type ast_raw =
     | Float of float
     | Bool of bool
@@ -7,6 +16,7 @@ type ast_raw =
     | Call of ast * ast list
     | Let of bool * string * string list * ast * ast option
     | If of ast * ast * ast
+    | Match of ast * (pattern * ast) list
 and ast = { filename: string; line: int; col: int; ast: ast_raw };;
 
 val print_ast : ast -> unit;;

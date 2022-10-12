@@ -17,7 +17,11 @@ type token_raw =
     | EqualSign
     | If
     | Then
-    | Else;;
+    | Else
+    | Match
+    | With
+    | Bar
+    | RArrow;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 
 type lexer = {
@@ -63,11 +67,16 @@ let lex (l: lexer) =
                             helper s (MultilineComment 1) line col l
                         else Ok { filename = l.filename; line; col; token = LParen }
                     | ')'                           -> Ok { filename = l.filename; line; col; token = RParen }
+                    | '|'                           -> Ok { filename = l.filename; line; col; token = Bar }
                     | '='                           -> Ok { filename = l.filename; line; col; token = EqualSign }
                     | '*'                           -> Ok { filename = l.filename; line; col; token = Star }
                     | '/'                           -> Ok { filename = l.filename; line; col; token = Slash }
                     | '+'                           -> Ok { filename = l.filename; line; col; token = Plus }
-                    | '-'                           -> Ok { filename = l.filename; line; col; token = Minus }
+                    | '-'                           ->
+                        if String.length l.contents > l.index && l.contents.[l.index] == '>' then
+                            let _ = l.index <- l.index + 1 in
+                            Ok { filename = l.filename; line; col; token = RArrow }
+                        else Ok { filename = l.filename; line; col; token = Minus }
                     | '%'                           -> Ok { filename = l.filename; line; col; token = Percent }
                     | ':'                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == ':' then
@@ -157,6 +166,8 @@ let lex (l: lexer) =
                         | "else"  -> Ok { filename = l.filename; line; col; token = Else }
                         | "true"  -> Ok { filename = l.filename; line; col; token = Bool true }
                         | "false" -> Ok { filename = l.filename; line; col; token = Bool false }
+                        | "match" -> Ok { filename = l.filename; line; col; token = Match }
+                        | "with"  -> Ok { filename = l.filename; line; col; token = With }
                         | s       -> Ok { filename = l.filename; line; col; token = Symbol s }
                 end
     in helper "" Start l.line l.col l;;

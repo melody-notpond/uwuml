@@ -1,1 +1,6 @@
-if true then uwu else owo
+let f a b c =
+    if a then
+        b
+    else c
+in f true (a :: b :: c) 3
+

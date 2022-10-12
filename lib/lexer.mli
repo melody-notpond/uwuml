@@ -17,7 +17,11 @@ type token_raw =
     | EqualSign
     | If
     | Then
-    | Else;;
+    | Else
+    | Match
+    | With
+    | Bar
+    | RArrow;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 type lexer;;
 type lexer_state;;
