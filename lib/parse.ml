@@ -13,7 +13,8 @@ type ty =
     | TypeVar of int
     | Generic of string
     | TypeName of string * ty list
-    | Product of ty list;;
+    | Product of ty list
+    | Function of ty * ty;;
 type ast_raw =
     | Float of float
     | Bool of bool
@@ -26,7 +27,7 @@ type ast_raw =
     | TypeSumDef of string * (string * ty option) list
     | TypeDef of string * ty
     | Many of ast list
-and ast = { filename: string; line: int; col: int; ty: ty; ast: ast_raw };;
+and ast = { filename: string; line: int; col: int; mutable ty: ty; ast: ast_raw };;
 
 let rec print_pattern p =
     match p.pattern with
@@ -73,6 +74,12 @@ let rec print_type t =
                 List.iter (fun ty -> print_string " * "; print_type ty) ts
             | [] -> ()
         end;
+        print_string ")"
+    | Function (arg, ret) ->
+        print_string "(";
+        print_type arg;
+        print_string " -> ";
+        print_type ret;
         print_string ")";;
 
 let print_ast =
@@ -81,6 +88,8 @@ let print_ast =
             print_string "    ";
         done;
         Printf.printf "%s:%i:%i " a.filename a.line a.col;
+        print_type a.ty;
+        print_string " : ";
         match a.ast with
         | Float f          ->
             print_float f;

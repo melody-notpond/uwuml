@@ -1,9 +1,2 @@
-type list =
-    | Nil
-    | Cons of 'a * list 'a;;
-
-let rec map f l =
-    match l with
-    | Nil       -> Nil
-    | Cons x xs -> Cons (f x) (map f xs);;
-
+let rec forever a = forever a;;
+let add a b = a + b in add 2 3;;

@@ -13,7 +13,8 @@ type ty =
     | TypeVar of int
     | Generic of string
     | TypeName of string * ty list
-    | Product of ty list;;
+    | Product of ty list
+    | Function of ty * ty;;
 type ast_raw =
     | Float of float
     | Bool of bool
@@ -26,8 +27,9 @@ type ast_raw =
     | TypeSumDef of string * (string * ty option) list
     | TypeDef of string * ty
     | Many of ast list
-and ast = { filename: string; line: int; col: int; ty: ty; ast: ast_raw };;
+and ast = { filename: string; line: int; col: int; mutable ty: ty; ast: ast_raw };;
 
 val print_ast : ast -> unit;;
+val print_type : ty -> unit;;
 val parse : string -> string -> (ast list, string) result;;
 
