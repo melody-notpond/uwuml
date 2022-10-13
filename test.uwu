@@ -1,5 +1,3 @@
-match v with
-| a | b -> c
-| x :: xs -> x
-| a b c -> b * c
-| _ -> uwu
+type list =
+    | Nil
+    | Cons of 'a * list 'a

@@ -8,6 +8,12 @@ type pattern_raw =
     | SumPat of string * pattern list
     | ManyPat of pattern * pattern
 and pattern = { filename: string; line: int; col: int; pattern: pattern_raw };;
+type ty =
+    | Unknown
+    | TypeVar of int
+    | Generic of string
+    | TypeName of string * ty list
+    | Product of ty list;;
 type ast_raw =
     | Float of float
     | Bool of bool
@@ -17,7 +23,10 @@ type ast_raw =
     | Let of bool * string * string list * ast * ast option
     | If of ast * ast * ast
     | Match of ast * (pattern * ast) list
-and ast = { filename: string; line: int; col: int; ast: ast_raw };;
+    | TypeSumDef of string * (string * ty option) list
+    | TypeDef of string * ty
+    | Many of ast list
+and ast = { filename: string; line: int; col: int; ty: ty; ast: ast_raw };;
 
 let rec print_pattern p =
     match p.pattern with
@@ -44,6 +53,27 @@ let rec print_pattern p =
         print_float f
     | BoolPat b ->
         print_string (if b then "true" else "false");;
+
+let rec print_type t =
+    match t with
+    | Unknown -> print_string "<unknown>"
+    | TypeVar var -> Printf.printf "$%i" var
+    | Generic g -> Printf.printf "'%s" g
+    | TypeName (name, types) ->
+        print_string "(";
+        print_string name;
+        List.iter (fun ty -> print_string " "; print_type ty) types;
+        print_string ")"
+    | Product types ->
+        print_string "(";
+        begin
+            match types with
+            | t :: ts ->
+                print_type t;
+                List.iter (fun ty -> print_string " * "; print_type ty) ts
+            | [] -> ()
+        end;
+        print_string ")";;
 
 let print_ast =
     let rec helper indentation a =
@@ -96,7 +126,19 @@ let print_ast =
             print_string "match\n";
             helper (indentation + 1) value;
             List.iter (function
-                       | (p, v) -> print_pattern p; print_newline (); helper (indentation + 1) v) pats;
+                       | (p, v) -> print_pattern p; print_newline (); helper (indentation + 1) v) pats
+        | TypeSumDef (name, variants) ->
+            Printf.printf "type %s = \n" name;
+            List.iter (function
+                       | (variant, Some ty) -> Printf.printf "    | %s of " variant; print_type ty; print_newline ()
+                       | (variant, None)    -> Printf.printf "    | %s\n"   variant) variants;
+        | TypeDef (name, ty) ->
+            Printf.printf "type %s = " name;
+            print_type ty;
+            print_newline ();
+        | Many v ->
+            print_string "many\n";
+            List.iter (helper (indentation + 1)) v
     in helper 0;;
 
 let (let*) o f =
@@ -161,6 +203,7 @@ let consume_token t l =
         | (Ok ({ token = Lexer.Float _; _ } as tok), Lexer.Float _) -> Ok tok
         | (Ok ({ token = Lexer.Bool _; _ } as tok), Lexer.Bool _) -> Ok tok
         | (Ok ({ token = Lexer.Symbol _; _ } as tok), Lexer.Symbol _) -> Ok tok
+        | (Ok ({ token = Lexer.Generic _; _ } as tok), Lexer.Generic _) -> Ok tok
         | _ ->
             Lexer.pop_lexer l state;
             Error "mismatched token";;
@@ -276,31 +319,31 @@ let rec parse_let l =
     map (((((consume_token Lexer.Let &* optional (consume_token Lexer.Rec) &* consume_token (Lexer.Symbol "") &* many_zero (consume_token (Lexer.Symbol ""))) <* consume_token Lexer.EqualSign) &* parse_top) <* consume_token Lexer.In) &* optional parse_top)
         (function
          | ((((({ filename; line; col; _ }, recursive), { token = Lexer.Symbol var; _ }), args), value), context) ->
-            { filename; line; col; ast = Let (Option.is_some recursive, var, List.map map_helper args, value, context) }
+            { filename; line; col; ty = Unknown; ast = Let (Option.is_some recursive, var, List.map map_helper args, value, context) }
          | _ -> raise Exit)
         l
 
 and parse_if l =
     map (consume_token Lexer.If &* parse_top &* (consume_token Lexer.Then *> parse_top) &* (consume_token Lexer.Else *> parse_top))
         (function
-            | ((({ filename; line; col; _ }, cond), theny), elsy) -> { filename; line; col; ast = If (cond, theny, elsy) })
+            | ((({ filename; line; col; _ }, cond), theny), elsy) -> { filename; line; col; ty = Unknown; ast = If (cond, theny, elsy) })
         l
 
 and parse_match l =
     map (consume_token Lexer.Match &* (parse_top <* consume_token Lexer.With) &* many_one ((consume_token Lexer.Bar *> parse_pattern) &* (consume_token Lexer.RArrow *> parse_top)))
         (function
-         | (({ filename; line; col; _ }, value), branches) -> { filename; line; col; ast = Match (value, branches) })
+         | (({ filename; line; col; _ }, value), branches) -> { filename; line; col; ty = Unknown; ast = Match (value, branches) })
         l
 
 and parse_value l =
     (map (consume_token (Lexer.Float 0.)) (function
-                                           | { filename; line; col; token = Lexer.Float f } -> { filename; line; col; ast = Float f }
+                                           | { filename; line; col; token = Lexer.Float f } -> { filename; line; col; ty = Unknown; ast = Float f }
                                            | _ -> raise Exit)
     |* map (consume_token (Lexer.Bool false)) (function
-                                               | { filename; line; col; token = Lexer.Bool b } -> { filename; line; col; ast = Bool b }
+                                               | { filename; line; col; token = Lexer.Bool b } -> { filename; line; col; ty = Unknown; ast = Bool b }
                                                | _ -> raise Exit)
     |* map (consume_token (Lexer.Symbol "")) (function
-                                              | { filename; line; col; token = Lexer.Symbol s } -> { filename; line; col; ast = Symbol s }
+                                              | { filename; line; col; token = Lexer.Symbol s } -> { filename; line; col; ty = Unknown; ast = Symbol s }
                                               | _ -> raise Exit)
     |* (consume_token Lexer.LParen *> parse_top <* consume_token Lexer.RParen)) l
 
@@ -308,7 +351,7 @@ and parse_call l =
     let* v = many_one parse_value l in
         match v with
         | [x]       -> Ok x
-        | f :: args -> Ok ({ filename = f.filename; line = f.line; col = f.col; ast = Call (f, args) })
+        | f :: args -> Ok ({ filename = f.filename; line = f.line; col = f.col; ty = Unknown; ast = Call (f, args) })
         | _         -> raise Exit
 
 and parse_mult l =
@@ -324,7 +367,7 @@ and parse_mult l =
             let state = Lexer.push_lexer l in
                 begin
                     match parse_call l with
-                    | Ok v    -> helper { filename = a.filename; line = a.line; col = a.col; ast = BinOp (op, a, v) } l
+                    | Ok v    -> helper { filename = a.filename; line = a.line; col = a.col; ty = Unknown; ast = BinOp (op, a, v) } l
                     | Error e ->
                         Lexer.pop_lexer l state;
                         Error e
@@ -345,7 +388,7 @@ and parse_add l =
             let state = Lexer.push_lexer l in
                 begin
                     match parse_mult l with
-                    | Ok v    -> helper { filename = a.filename; line = a.line; col = a.col; ast = BinOp (op, a, v) } l
+                    | Ok v    -> helper { filename = a.filename; line = a.line; col = a.col; ty = Unknown; ast = BinOp (op, a, v) } l
                     | Error e ->
                         Lexer.pop_lexer l state;
                         Error e
@@ -372,13 +415,64 @@ and parse_cons l =
     let rec helper a =
         match a with
         | [a]       -> a
-        | a :: asts -> { filename = a.filename; line = a.line; col = a.col; ast = BinOp (Cons, a, helper asts) }
+        | a :: asts -> { filename = a.filename; line = a.line; col = a.col; ty = Unknown; ast = BinOp (Cons, a, helper asts) }
         | []        -> raise Exit
     in Ok (helper a)
 
+and parse_top_value l =
+    (parse_let |* parse_if |* parse_match |* parse_cons) l
+
 and parse_top l =
-    (parse_let |* parse_if |* parse_match |* parse_cons) l;;
+    let* x = parse_top_value l in
+    let* xs = (many_zero (consume_token Lexer.Semicolon *> parse_top_value) <* optional (consume_token Lexer.Semicolon)) l in
+        Ok { filename = x.filename; line = x.line; col = x.col; ty = Unknown; ast = Many (x :: xs) };;
+
+let rec parse_type_value l =
+    ((map (consume_token (Lexer.Generic "") |* consume_token (Lexer.Symbol ""))
+        (function
+         | { token = Lexer.Generic g; _ } -> Generic g
+         | { token = Lexer.Symbol s; _ }  -> TypeName (s, [])
+         | _                              -> raise Exit))
+    |* (consume_token (Lexer.LParen) *> parse_type <* consume_token (Lexer.RParen)))
+        l
+
+and parse_type_applied l =
+    let* name = consume_token (Lexer.Symbol "") l in
+    let* args = many_zero parse_type_value l in
+        match name with
+        | { token = Lexer.Symbol name; _ } -> Ok (TypeName (name, args))
+        | _ -> raise Exit
+
+and parse_type_sub l =
+    (parse_type_applied |* parse_type_value) l
+
+and parse_type l =
+    map (parse_type_sub &* many_zero (consume_token Lexer.Star *> parse_type_sub))
+        (function
+         | (x, []) -> x
+         | (x, xs) -> Product (x :: xs))
+        l;;
+
+let parse_sum_type_def_variant l =
+    ((consume_token Lexer.Bar *> (map (consume_token (Lexer.Symbol ""))
+        (function
+         | { token = Lexer.Symbol s; _ } -> s
+         | _ -> raise Exit))) &* optional (consume_token Lexer.Of *> parse_type)) l;;
+
+let parse_sum_type_def l =
+    map (consume_token Lexer.Type &* consume_token (Lexer.Symbol "") &* (consume_token Lexer.EqualSign *> many_one parse_sum_type_def_variant))
+        (function
+         | (({ filename; line; col; _ }, { token = Symbol name; _ }), variants) -> { filename; line; col; ty = Unknown; ast = TypeSumDef (name, variants) }
+         | _ -> raise Exit)
+        l;;
+
+let parse_type_def l =
+    (parse_sum_type_def |* (map (consume_token Lexer.Type &* consume_token (Lexer.Symbol "") &* (consume_token Lexer.EqualSign *> parse_type))
+        (function
+         | (({ filename; line; col; _ }, { token = Lexer.Symbol name; _ }), ty) -> { filename; line; col; ty = Unknown; ast = TypeDef (name, ty)}
+         | _ -> raise Exit)))
+        l;;
 
 let parse filename contents =
     let l = Lexer.create_lexer filename contents
-    in parse_top l;;
+    in (parse_top |* parse_type_def) l;;

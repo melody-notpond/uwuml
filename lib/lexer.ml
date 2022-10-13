@@ -3,6 +3,7 @@ type token_raw =
     | Float of float
     | Bool of bool
     | Symbol of string
+    | Generic of string
     | Star
     | Slash
     | Plus
@@ -21,7 +22,11 @@ type token_raw =
     | Match
     | With
     | Bar
-    | RArrow;;
+    | RArrow
+    | Type
+    | Of
+    | Semicolon
+    | DoubleSemicolon;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 
 type lexer = {
@@ -46,7 +51,7 @@ let pop_lexer (l: lexer) state =
     l.col <- state.col;
     ();;
 
-type state = Start | MultilineComment of int | FloatTop | FloatPastDot | FloatPastEe | FloatPastEeFirst | Symbol;;
+type state = Start | MultilineComment of int | FloatTop | FloatPastDot | FloatPastEe | FloatPastEeFirst | Symbol | Generic;;
 
 let lex (l: lexer) =
     let rec helper s state line col l =
@@ -61,6 +66,7 @@ let lex (l: lexer) =
                     match c with
                     | '0' .. '9'                    -> helper (s ^ String.make 1 c) FloatTop line col l
                     | 'a' .. 'z' | 'A' .. 'Z' | '_' -> helper (s ^ String.make 1 c) Symbol line col l
+                    | '\''                          -> helper s Generic line col l
                     | '('                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == '*' then
                             let _ = l.index <- l.index + 1 in
@@ -83,6 +89,11 @@ let lex (l: lexer) =
                             let _ = l.index <- l.index + 1 in
                             Ok { filename = l.filename; line; col; token = DoubleColon }
                         else Error "invalid token"
+                    | ';'                           ->
+                        if String.length l.contents > l.index && l.contents.[l.index] == ';' then
+                            let _ = l.index <- l.index + 1 in
+                            Ok { filename = l.filename; line; col; token = DoubleSemicolon }
+                        else Ok { filename = l.filename; line; col; token = Semicolon }
                     | ' ' | '\t' | '\r'             -> helper s Start l.line l.col l
                     | '\n'                          ->
                         l.line <- l.line + 1;
@@ -168,12 +179,18 @@ let lex (l: lexer) =
                         | "false" -> Ok { filename = l.filename; line; col; token = Bool false }
                         | "match" -> Ok { filename = l.filename; line; col; token = Match }
                         | "with"  -> Ok { filename = l.filename; line; col; token = With }
+                        | "type"  -> Ok { filename = l.filename; line; col; token = Type }
+                        | "of"  -> Ok { filename = l.filename; line; col; token = Of }
                         | s       -> Ok { filename = l.filename; line; col; token = Symbol s }
+                end
+            | Generic         ->
+                begin
+                    match c with
+                    | 'a' .. 'z' | 'A' .. 'Z' | '_' -> helper (s ^ String.make 1 c) Generic line col l
+                    | _                                          ->
+                        l.index <- l.index - 1;
+                        l.col <- l.col - 1;
+                        Ok { filename = l.filename; line; col; token = Generic s }
                 end
     in helper "" Start l.line l.col l;;
 
-let peek (l: lexer) =
-    let state = push_lexer l in
-    let token = lex l in
-    let () = pop_lexer l state in
-    token;;

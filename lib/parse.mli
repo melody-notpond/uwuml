@@ -8,6 +8,12 @@ type pattern_raw =
     | SumPat of string * pattern list
     | ManyPat of pattern * pattern
 and pattern = { filename: string; line: int; col: int; pattern: pattern_raw };;
+type ty =
+    | Unknown
+    | TypeVar of int
+    | Generic of string
+    | TypeName of string * ty list
+    | Product of ty list;;
 type ast_raw =
     | Float of float
     | Bool of bool
@@ -17,7 +23,10 @@ type ast_raw =
     | Let of bool * string * string list * ast * ast option
     | If of ast * ast * ast
     | Match of ast * (pattern * ast) list
-and ast = { filename: string; line: int; col: int; ast: ast_raw };;
+    | TypeSumDef of string * (string * ty option) list
+    | TypeDef of string * ty
+    | Many of ast list
+and ast = { filename: string; line: int; col: int; ty: ty; ast: ast_raw };;
 
 val print_ast : ast -> unit;;
 val parse : string -> string -> (ast, string) result;;
