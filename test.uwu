@@ -1,6 +1,5 @@
-let f a b c =
-    if a then
-        b
-    else c
-in f true (a :: b :: c) 3
-
+match v with
+| a | b -> c
+| x :: xs -> x
+| a b c -> b * c
+| _ -> uwu

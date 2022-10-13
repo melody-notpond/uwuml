@@ -39,7 +39,7 @@ let rec print_pattern p =
         print_pattern a;
         print_string " | ";
         print_pattern b;
-        print_string "("
+        print_string ")"
     | FloatPat f ->
         print_float f
     | BoolPat b ->
@@ -165,6 +165,14 @@ let consume_token t l =
             Lexer.pop_lexer l state;
             Error "mismatched token";;
 
+let consume_token_exact t l =
+    let state = Lexer.push_lexer l in
+        match Lexer.lex l with
+        | Ok ({ token; _ } as tok) when token == t -> Ok tok
+        | _ ->
+            Lexer.pop_lexer l state;
+            Error "mismatched token";;
+
 let optional f l =
     Ok (Result.to_option (f l));;
 
@@ -189,55 +197,75 @@ let map f g l =
     | Ok v    -> Ok (g v)
     | Error e -> Error e
 
-(*
 let rec parse_pattern_value l =
-    let state = Lexer.push_lexer l in
-        match Lexer.lex l with
-        | Ok { filename; line; col; token = Lexer.Symbol "_" } -> Ok { filename; line; col; pattern = Wildcard }
-        | Ok { filename; line; col; token = Lexer.Symbol s } -> Ok { filename; line; col; pattern = SymbolPat s }
-        | Ok { filename; line; col; token = Lexer.Float f } -> Ok { filename; line; col; pattern = FloatPat f }
-        | Ok { filename; line; col; token = Lexer.Bool b } -> Ok { filename; line; col; pattern = BoolPat b }
-        | Ok { token = Lexer.LParen; _ } ->
-            begin
-                match parse_pattern l with
-                | Ok v -> begin
-                    match Lexer.lex l with
-                    | Ok { token = Lexer.RParen; _ } -> Ok v
-                    | _ ->
-                        Lexer.pop_lexer l state;
-                        Error "invalid pattern"
-                end
-                | Error e -> Error e
-            end
-        | _ ->
-            Lexer.pop_lexer l state;
-            Error "invalid pattern";
+    (map (consume_token_exact (Lexer.Symbol "_"))
+        (function
+         | { filename; line; col; _ } -> { filename; line; col; pattern = Wildcard })
+    |* map (consume_token (Lexer.Symbol ""))
+        (function
+         | { filename; line; col; token = Lexer.Symbol s } -> { filename; line; col; pattern = SymbolPat s }
+         | _ -> raise Exit)
+    |* map (consume_token (Lexer.Float 0.))
+        (function
+         | { filename; line; col; token = Lexer.Float f } -> { filename; line; col; pattern = FloatPat f }
+         | _ -> raise Exit)
+    |* map (consume_token (Lexer.Bool false))
+        (function
+         | { filename; line; col; token = Lexer.Bool b } -> { filename; line; col; pattern = BoolPat b }
+         | _ -> raise Exit)
+    |* (consume_token Lexer.LParen *> parse_pattern <* consume_token Lexer.RParen))
+        l
 
 and parse_pattern_sum l =
-    let state = Lexer.push_lexer l in
-        match Lexer.lex l with
-        | Ok { filename; line; col; token = Lexer.Symbol v } ->
-            let rec helper a l =
-                let state = Lexer.push_lexer l in
-                match parse_pattern_value l with
-                | Ok v    -> helper (v :: a) l
-                | Error _ ->
-                    Lexer.pop_lexer l state;
-                    List.rev a
-            in begin
-                match helper [] l with
-                | [] ->
-                    Lexer.pop_lexer l state;
-                    Error "invalid sum pattern"
-                | l  -> Ok { filename; line; col; pattern = SumPat (v, l) }
-            end
-        | _ ->
-            Lexer.pop_lexer l state;
-            Error "invalid sum pattern"
+    map (consume_token (Lexer.Symbol "") &* many_one parse_pattern_value)
+        (function
+         | ({ filename; line; col; token = Lexer.Symbol variant }, xs) ->
+            { filename; line; col; pattern = SumPat (variant, xs) }
+         | _ -> raise Exit)
+        l
 
-and parse_pattern l =
-    Error "";;
-*)
+and parse_pattern_sum_or_value l =
+    (parse_pattern_sum |* parse_pattern_value) l
+
+and parse_pattern_cons l =
+    let rec helper p l =
+        match consume_token Lexer.DoubleColon l with
+        | Ok _    ->
+            let state = Lexer.push_lexer l in
+                begin
+                    match parse_pattern_sum_or_value l with
+                    | Ok v    -> helper (v :: p) l
+                    | Error e ->
+                        Lexer.pop_lexer l state;
+                        Error e
+                end
+        | Error _ -> Ok (List.rev p)
+    in let* p = parse_pattern_sum_or_value l in
+    let* p = helper [p] l in
+    let rec helper (p: pattern list) =
+        match p with
+        | [p]     -> p
+        | p :: ps -> { filename = p.filename; line = p.line; col = p.col; pattern = ConsPat (p, helper ps) }
+        | []      -> raise Exit
+    in Ok (helper p)
+
+and parse_pattern_many l =
+    let rec helper (p: pattern) l =
+        match consume_token Lexer.Bar l with
+        | Ok _   ->
+            let state = Lexer.push_lexer l in
+                begin
+                    match parse_pattern_cons l with
+                    | Ok v    -> helper { filename = p.filename; line = p.line; col = p.col; pattern = ManyPat (p, v) } l
+                    | Error e ->
+                        Lexer.pop_lexer l state;
+                        Error e
+                end
+        | Error _ -> Ok p
+    in let* a = parse_pattern_cons l in
+        helper a l
+
+and parse_pattern l = parse_pattern_many l;;
 
 let map_helper (v: Lexer.token) =
     match v.token with
@@ -258,60 +286,11 @@ and parse_if l =
             | ((({ filename; line; col; _ }, cond), theny), elsy) -> { filename; line; col; ast = If (cond, theny, elsy) })
         l
 
-(*
 and parse_match l =
-    let state = Lexer.push_lexer l in
-        match Lexer.lex l with
-        | Ok { filename; line; col; token = Lexer.Match } ->
-            begin
-                match parse_top l with
-                | Ok value ->
-                    begin
-                        match Lexer.lex l with
-                        | Ok { token = Lexer.With; _ } ->
-                            let rec helper l a =
-                                let state = Lexer.push_lexer l in
-                                    match Lexer.lex l with
-                                    | Ok { token = Lexer.Bar; _ } ->
-                                        begin
-                                            match parse_pattern l with
-                                            | Ok p ->
-                                                    begin
-                                                        match Lexer.lex l with
-                                                        | Ok { token = Lexer.RArrow; _ } ->
-                                                            begin
-                                                                match parse_top l with
-                                                                | Ok v -> helper l ((p, v) :: a)
-                                                                | Error e ->
-                                                                    Lexer.pop_lexer l state;
-                                                                    Error e
-                                                            end
-                                                        | _ ->
-                                                            Lexer.pop_lexer l state;
-                                                            Error "invalid match"
-                                                    end
-                                            | Error e -> Error e                                            
-                                        end
-                                    | _ ->
-                                        Lexer.pop_lexer l state;
-                                        Ok a
-                            in begin
-                                match helper l [] with
-                                | Ok matches -> Ok { filename; line; col; ast = Match (value, matches) }
-                                | Error e -> Error e                            
-                            end
-                        | _ ->
-                            Lexer.pop_lexer l state;
-                            Error "invalid match"
-                    end
-                | Error e ->
-                    Lexer.pop_lexer l state;
-                    Error e
-            end
-        | _ ->
-            Lexer.pop_lexer l state;
-            Error "invalid match"
-*)
+    map (consume_token Lexer.Match &* (parse_top <* consume_token Lexer.With) &* many_one ((consume_token Lexer.Bar *> parse_pattern) &* (consume_token Lexer.RArrow *> parse_top)))
+        (function
+         | (({ filename; line; col; _ }, value), branches) -> { filename; line; col; ast = Match (value, branches) })
+        l
 
 and parse_value l =
     (map (consume_token (Lexer.Float 0.)) (function
@@ -398,7 +377,7 @@ and parse_cons l =
     in Ok (helper a)
 
 and parse_top l =
-    (parse_let |* parse_if |* parse_cons) l;;
+    (parse_let |* parse_if |* parse_match |* parse_cons) l;;
 
 let parse filename contents =
     let l = Lexer.create_lexer filename contents
