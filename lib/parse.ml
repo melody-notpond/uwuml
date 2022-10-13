@@ -482,5 +482,5 @@ let parse_top_level l =
 let parse filename contents =
     let l = Lexer.create_lexer filename contents in
     let* x = parse_top_level l in
-    let* xs = (many_zero (consume_token Lexer.DoubleSemicolon *> parse_top_level) <* optional (consume_token Lexer.DoubleSemicolon)) l in
+    let* xs = (many_zero (consume_token Lexer.DoubleSemicolon *> parse_top_level) <* optional (consume_token Lexer.DoubleSemicolon) <* consume_token Lexer.Eof) l in
         Ok (x :: xs)
