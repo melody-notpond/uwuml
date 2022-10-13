@@ -29,5 +29,5 @@ type ast_raw =
 and ast = { filename: string; line: int; col: int; ty: ty; ast: ast_raw };;
 
 val print_ast : ast -> unit;;
-val parse : string -> string -> (ast, string) result;;
+val parse : string -> string -> (ast list, string) result;;
 

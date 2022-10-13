@@ -1,3 +1,9 @@
 type list =
     | Nil
-    | Cons of 'a * list 'a
+    | Cons of 'a * list 'a;;
+
+let rec map f l =
+    match l with
+    | Nil       -> Nil
+    | Cons x xs -> Cons (f x) (map f xs);;
+

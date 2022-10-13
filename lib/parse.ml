@@ -316,7 +316,7 @@ let map_helper (v: Lexer.token) =
     | _ -> raise Exit;;
 
 let rec parse_let l =
-    map (((((consume_token Lexer.Let &* optional (consume_token Lexer.Rec) &* consume_token (Lexer.Symbol "") &* many_zero (consume_token (Lexer.Symbol ""))) <* consume_token Lexer.EqualSign) &* parse_top) <* consume_token Lexer.In) &* optional parse_top)
+    map ((((consume_token Lexer.Let &* optional (consume_token Lexer.Rec) &* consume_token (Lexer.Symbol "") &* many_zero (consume_token (Lexer.Symbol ""))) <* consume_token Lexer.EqualSign) &* parse_top) &* optional (consume_token Lexer.In *> parse_top))
         (function
          | ((((({ filename; line; col; _ }, recursive), { token = Lexer.Symbol var; _ }), args), value), context) ->
             { filename; line; col; ty = Unknown; ast = Let (Option.is_some recursive, var, List.map map_helper args, value, context) }
@@ -425,7 +425,10 @@ and parse_top_value l =
 and parse_top l =
     let* x = parse_top_value l in
     let* xs = (many_zero (consume_token Lexer.Semicolon *> parse_top_value) <* optional (consume_token Lexer.Semicolon)) l in
-        Ok { filename = x.filename; line = x.line; col = x.col; ty = Unknown; ast = Many (x :: xs) };;
+        match xs with
+        | [] -> Ok x
+        | _ ->
+            Ok { filename = x.filename; line = x.line; col = x.col; ty = Unknown; ast = Many (x :: xs) };;
 
 let rec parse_type_value l =
     ((map (consume_token (Lexer.Generic "") |* consume_token (Lexer.Symbol ""))
@@ -473,6 +476,11 @@ let parse_type_def l =
          | _ -> raise Exit)))
         l;;
 
+let parse_top_level l =
+    (parse_type_def |* parse_top) l;;
+
 let parse filename contents =
-    let l = Lexer.create_lexer filename contents
-    in (parse_top |* parse_type_def) l;;
+    let l = Lexer.create_lexer filename contents in
+    let* x = parse_top_level l in
+    let* xs = (many_zero (consume_token Lexer.DoubleSemicolon *> parse_top_level) <* optional (consume_token Lexer.DoubleSemicolon)) l in
+        Ok (x :: xs)

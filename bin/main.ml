@@ -15,5 +15,5 @@ let a = match Parse.parse filename contents with
     | Error e ->
         Printf.eprintf "error encountered: %s" e;
         exit 1;;
-Parse.print_ast a;;
+List.iter Parse.print_ast a;;
 
