@@ -110,8 +110,10 @@ let rec assign_typevars (ast: Parse.ast) scopes substitutions =
         set_substitution_constraint substitutions theny.ty elsy.ty;
 
     | Parse.Match (_value, _pats) -> ()
-    | Parse.TypeSumDef (_name, _variants) -> ()
-    | Parse.TypeDef (_name, _ty) -> ()
+    | Parse.TypeSumDef (_name, _variants) ->
+        set_substitution_constraint substitutions ast.ty (Parse.TypeName ("unit", []));
+    | Parse.TypeDef (_name, _ty) ->
+        set_substitution_constraint substitutions ast.ty (Parse.TypeName ("unit", []));
     | Parse.Many values ->
         List.iter (fun x -> assign_typevars x scopes substitutions) values;;
 
@@ -123,14 +125,16 @@ let rec flatten_substitutions_helper n subs subs_total =
             match !x with
             | Parse.TypeVar m when n <> m ->
                 x := !(List.nth subs_total m);
-                true
+                Parse.TypeVar m <> !x;
+            | Parse.Unknown -> false
             | t ->
                 let modified = ref false in
                 let rec helper t =
                     match t with
                     | Parse.TypeVar m when n <> m ->
-                        modified := true;
-                        !(List.nth subs_total m)
+                        let t = !(List.nth subs_total m) in
+                        let () = modified := !modified || t <> Parse.TypeVar m in
+                        t
                     | Parse.TypeName (name, ts) ->
                         Parse.TypeName (name, List.map helper ts)
                     | Parse.Product ts ->
@@ -180,19 +184,29 @@ let rec set_ast_types (ast: Parse.ast) substitutions =
     | Parse.TypeDef (_name, _ty) -> ()
     | Parse.Many values ->
         List.iter (fun x -> set_ast_types x substitutions) values
-    | _ ->  ();;
+    | _ -> ();;
+
+let rec find_constructors (asts: Parse.ast list) =
+    match asts with
+    | [] -> []
+    | x :: xs ->
+        begin
+            match x.ast with
+            | Parse.TypeSumDef (name, variants) ->
+                List.map (function
+                          | (n, Some (Parse.Product ts)) -> (n, List.fold_right (fun x y -> Parse.Function (x, y)) ts (Parse.TypeName (name, [])))
+                          | (n, Some t) -> (n, Parse.Function (t, Parse.TypeName (name, [])))
+                          | (n, None) -> (n, Parse.TypeName (name, [])))  variants @ find_constructors xs;
+            | _ ->
+                find_constructors xs;
+        end;;
 
 let typecheck asts =
     let substitutions = ref [] in
-    let scopes = ref [] in begin
+    let scopes = ref (find_constructors asts) in begin
         List.iter (fun ast -> assign_typevars ast scopes substitutions) asts;
         flatten_substitutions !substitutions;
         List.iter (fun x -> set_ast_types x !substitutions) asts;
         List.iter Parse.print_ast asts;
-        (*
-        print_string "substitutions = [";
-        List.iteri (fun i t -> print_string "($"; print_int i; print_string " = "; Parse.print_type !t; print_string "), ") !substitutions;
-        print_string "]\n";
-        *)
         Ok ()
     end;;

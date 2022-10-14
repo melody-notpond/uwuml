@@ -1,4 +1,5 @@
 (executable
  (public_name uwuml)
  (name main)
- (libraries uwuml))
+ (libraries uwuml)
+ (modes byte exe))

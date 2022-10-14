@@ -1,14 +1,8 @@
-(*
 type list =
     | Nil
-    | Cons of 'a * list 'a;;
+    | Cons of float * list;;
 
 let rec range a b =
     if a < b then
-        Nil
-    else
-        Cons a (range (a + 1) b);;
-        *)
-
-let add a b = a + b in
-add 2 3;;
+        Cons a (range (a + 1) b)
+    else Nil;;
