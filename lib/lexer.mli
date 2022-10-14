@@ -26,7 +26,12 @@ type token_raw =
     | Type
     | Of
     | Semicolon
-    | DoubleSemicolon;;
+    | DoubleSemicolon
+    | LAngle
+    | RAngle
+    | LEqual
+    | GEqual
+    | Diamond;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 type lexer;;
 type lexer_state;;

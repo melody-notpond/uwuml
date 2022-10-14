@@ -1,1 +1,14 @@
-let add a b = a + b in add 2 3;;
+(*
+type list =
+    | Nil
+    | Cons of 'a * list 'a;;
+
+let rec range a b =
+    if a < b then
+        Nil
+    else
+        Cons a (range (a + 1) b);;
+        *)
+
+let add a b = a + b in
+add 2 3;;

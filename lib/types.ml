@@ -57,11 +57,14 @@ let rec assign_typevars (ast: Parse.ast) scopes substitutions =
                     set_substitution_constraint substitutions b.ty (Parse.TypeName ("list", [t]));
                     set_substitution_constraint substitutions ast.ty (Parse.TypeName ("list", [t]));
                 end
-            | _ -> begin
-                    set_substitution_constraint substitutions a.ty (Parse.TypeName ("float", []));
-                    set_substitution_constraint substitutions b.ty (Parse.TypeName ("float", []));
-                    set_substitution_constraint substitutions ast.ty (Parse.TypeName ("float", []));
-            end
+            | Parse.Add | Parse.Sub | Parse.Mul | Parse.Div | Parse.Mod ->
+                set_substitution_constraint substitutions a.ty (Parse.TypeName ("float", []));
+                set_substitution_constraint substitutions b.ty (Parse.TypeName ("float", []));
+                set_substitution_constraint substitutions ast.ty (Parse.TypeName ("float", []));
+            | Parse.Gt | Parse.Lt | Parse.Ge | Parse.Le | Parse.Eq | Parse.Ne ->
+                set_substitution_constraint substitutions a.ty (Parse.TypeName ("float", []));
+                set_substitution_constraint substitutions b.ty (Parse.TypeName ("float", []));
+                set_substitution_constraint substitutions ast.ty (Parse.TypeName ("bool", []));
         end
 
     | Parse.Call (f, args) ->

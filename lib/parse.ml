@@ -1,4 +1,4 @@
-type bin_op = Mul | Div | Add | Sub | Mod | Cons;;
+type bin_op = Mul | Div | Add | Sub | Mod | Cons | Lt | Gt | Eq | Ne | Le | Ge;;
 type pattern_raw =
     | Wildcard
     | SymbolPat of string
@@ -108,6 +108,12 @@ let print_ast =
                 | Sub  -> print_string "-"
                 | Mod  -> print_string "%"
                 | Cons -> print_string "::"
+                | Lt -> print_string "<"
+                | Gt -> print_string ">"
+                | Eq -> print_string "="
+                | Ne -> print_string "<>"
+                | Le -> print_string ">="
+                | Ge -> print_string "<="
             end;
             print_newline ();
             helper (indentation + 1) a;
@@ -428,8 +434,33 @@ and parse_cons l =
         | []        -> raise Exit
     in Ok (helper a)
 
+and parse_compare l =
+    let rec helper a l =
+        match (consume_token Lexer.EqualSign |* consume_token Lexer.Diamond |* consume_token Lexer.LAngle |* consume_token Lexer.RAngle |* consume_token Lexer.LEqual |* consume_token Lexer.GEqual) l with
+        | Ok { token; _ }   ->
+            let op = match token with
+                     | Lexer.EqualSign -> Eq
+                     | Lexer.Diamond   -> Ne
+                     | Lexer.LAngle    -> Lt
+                     | Lexer.RAngle    -> Gt
+                     | Lexer.LEqual    -> Le
+                     | Lexer.GEqual    -> Ge
+                     | _             -> raise Exit
+            in
+            let state = Lexer.push_lexer l in
+                begin
+                    match parse_cons l with
+                    | Ok v    -> helper { filename = a.filename; line = a.line; col = a.col; ty = Unknown; ast = BinOp (op, a, v) } l
+                    | Error e ->
+                        Lexer.pop_lexer l state;
+                        Error e
+                end
+        | Error _ -> Ok a
+    in let* a = parse_cons l in
+        helper a l
+
 and parse_top_value l =
-    (parse_let |* parse_if |* parse_match |* parse_cons) l
+    (parse_let |* parse_if |* parse_match |* parse_compare) l
 
 and parse_top l =
     let* x = parse_top_value l in

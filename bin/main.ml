@@ -15,5 +15,5 @@ let a = match Parse.parse filename contents with
     | Error e ->
         Printf.eprintf "error encountered: %s" e;
         exit 1;;
-Types.typecheck a;
+Types.typecheck a;;
 

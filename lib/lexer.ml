@@ -26,7 +26,12 @@ type token_raw =
     | Type
     | Of
     | Semicolon
-    | DoubleSemicolon;;
+    | DoubleSemicolon
+    | LAngle
+    | RAngle
+    | LEqual
+    | GEqual
+    | Diamond;;
 type token = { filename: string; line: int; col: int; token: token_raw };;
 
 type lexer = {
@@ -70,6 +75,7 @@ let lex (l: lexer) =
                     | '('                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == '*' then
                             let _ = l.index <- l.index + 1 in
+                            let _ = l.col <- l.col + 1 in
                             helper s (MultilineComment 1) line col l
                         else Ok { filename = l.filename; line; col; token = LParen }
                     | ')'                           -> Ok { filename = l.filename; line; col; token = RParen }
@@ -81,17 +87,36 @@ let lex (l: lexer) =
                     | '-'                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == '>' then
                             let _ = l.index <- l.index + 1 in
+                            let _ = l.col <- l.col + 1 in
                             Ok { filename = l.filename; line; col; token = RArrow }
                         else Ok { filename = l.filename; line; col; token = Minus }
                     | '%'                           -> Ok { filename = l.filename; line; col; token = Percent }
                     | ':'                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == ':' then
                             let _ = l.index <- l.index + 1 in
+                            let _ = l.col <- l.col + 1 in
                             Ok { filename = l.filename; line; col; token = DoubleColon }
                         else Error "invalid token"
+                    | '<'                           ->
+                        if String.length l.contents > l.index && l.contents.[l.index] == '=' then
+                            let _ = l.index <- l.index + 1 in
+                            let _ = l.col <- l.col + 1 in
+                            Ok { filename = l.filename; line; col; token = LEqual }
+                        else if String.length l.contents > l.index && l.contents.[l.index] == '>' then
+                            let _ = l.index <- l.index + 1 in
+                            let _ = l.col <- l.col + 1 in
+                            Ok { filename = l.filename; line; col; token = Diamond }
+                        else Ok { filename = l.filename; line; col; token = LAngle }
+                    | '>'                           ->
+                        if String.length l.contents > l.index && l.contents.[l.index] == '=' then
+                            let _ = l.index <- l.index + 1 in
+                            let _ = l.col <- l.col + 1 in
+                            Ok { filename = l.filename; line; col; token = GEqual }
+                        else Ok { filename = l.filename; line; col; token = RAngle }
                     | ';'                           ->
                         if String.length l.contents > l.index && l.contents.[l.index] == ';' then
                             let _ = l.index <- l.index + 1 in
+                            let _ = l.col <- l.col + 1 in
                             Ok { filename = l.filename; line; col; token = DoubleSemicolon }
                         else Ok { filename = l.filename; line; col; token = Semicolon }
                     | ' ' | '\t' | '\r'             -> helper s Start l.line l.col l

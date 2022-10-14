@@ -1,4 +1,4 @@
-type bin_op = Mul | Div | Add | Sub | Mod | Cons;;
+type bin_op = Mul | Div | Add | Sub | Mod | Cons | Lt | Gt | Eq | Ne | Le | Ge;;
 type pattern_raw =
     | Wildcard
     | SymbolPat of string
