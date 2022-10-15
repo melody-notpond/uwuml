@@ -11,8 +11,12 @@ let rec set_substitution_constraint substitutions t1 t2 =
                 match !sub with
                 | Parse.Unknown ->
                     sub := t;
-                | Parse.TypeVar n -> helper n t;
-                | u -> set_substitution_constraint substitutions u t
+                | Parse.TypeVar m ->
+                    if n <> m then
+                        helper m t
+                    else sub := t;
+                | u ->
+			set_substitution_constraint substitutions u t
         in helper n t
     | (Parse.TypeName (n1, g1), Parse.TypeName (n2, g2)) when n1 = n2 ->
         List.iter2 (set_substitution_constraint substitutions) g1 g2;
@@ -196,7 +200,8 @@ let rec find_constructors (asts: Parse.ast list) =
                 List.map (function
                           | (n, Some (Parse.Product ts)) -> (n, List.fold_right (fun x y -> Parse.Function (x, y)) ts (Parse.TypeName (name, [])))
                           | (n, Some t) -> (n, Parse.Function (t, Parse.TypeName (name, [])))
-                          | (n, None) -> (n, Parse.TypeName (name, [])))  variants @ find_constructors xs;
+
+                          | (n, None) -> (n, Parse.TypeName (name, []))) variants @ find_constructors xs;
             | _ ->
                 find_constructors xs;
         end;;
@@ -208,5 +213,9 @@ let typecheck asts =
         flatten_substitutions !substitutions;
         List.iter (fun x -> set_ast_types x !substitutions) asts;
         List.iter Parse.print_ast asts;
+        print_string "substitutions = [";
+        List.iteri (fun i t -> print_string "($"; print_int i; print_string " = "; Parse.print_type !t; print_string "), ") !substitutions;
+        print_string "]\n";
         Ok ()
+
     end;;
