@@ -12,3 +12,4 @@ cons true Nil;
 let id x = x;;
 id 2;;
 id true;;
+id;;

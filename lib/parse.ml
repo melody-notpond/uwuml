@@ -330,8 +330,8 @@ let map_helper (v: Lexer.token) =
     | Lexer.Symbol s -> s
     | _ -> raise Exit;;
 
-let rec parse_let l =
-    map ((((consume_token Lexer.Let &* optional (consume_token Lexer.Rec) &* consume_token (Lexer.Symbol "") &* many_zero (consume_token (Lexer.Symbol ""))) <* consume_token Lexer.EqualSign) &* parse_top) &* optional (consume_token Lexer.In *> parse_top))
+let rec parse_let requires_in l =
+    map ((((consume_token Lexer.Let &* optional (consume_token Lexer.Rec) &* consume_token (Lexer.Symbol "") &* many_zero (consume_token (Lexer.Symbol ""))) <* consume_token Lexer.EqualSign) &* parse_top) &* (if requires_in then map (consume_token Lexer.In *> parse_top) (fun x -> Some x) else optional (consume_token Lexer.In *> parse_top)))
         (function
          | ((((({ filename; line; col; _ }, recursive), { token = Lexer.Symbol var; _ }), args), value), context) ->
             { filename; line; col; ty = Unknown; ast = Let (Option.is_some recursive, var, List.map map_helper args, value, context) }
@@ -460,7 +460,7 @@ and parse_compare l =
         helper a l
 
 and parse_top_value l =
-    (parse_let |* parse_if |* parse_match |* parse_compare) l
+    (parse_let true |* parse_if |* parse_match |* parse_compare) l
 
 and parse_top l =
     let* x = parse_top_value l in
@@ -517,7 +517,7 @@ let parse_type_def l =
         l;;
 
 let parse_top_level l =
-    (parse_type_def |* parse_top) l;;
+    (parse_type_def |* parse_top |* parse_let false) l;;
 
 let parse filename contents =
     let l = Lexer.create_lexer filename contents in
