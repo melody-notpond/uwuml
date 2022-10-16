@@ -1,15 +1,4 @@
-(*
-type list =
-    | Nil
-    | Cons of 'a * list 'a;;
-
-let cons a b = Cons a b;;
-
-cons 2 Nil;
-cons true Nil;
-*)
-
 let id x = x;;
-id 2;;
-id true;;
-id;;
+let apply f x = f x;;
+apply id 2;;
+apply id false;;

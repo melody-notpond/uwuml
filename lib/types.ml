@@ -169,15 +169,13 @@ let rec assign_typevars (ast: Parse.ast) scopes substitutions handle_top =
             begin
                 let arg_types = List.map (fun arg -> (arg, new_type_var substitutions)) args in
                 let new_scope = ref (arg_types @ !scopes) in
-                begin
-                    if recursive then
-                        new_scope := (var, t) :: !new_scope
-                    else ();
-                    assign_typevars value new_scope substitutions handle_top;
-                    set_substitution_constraint substitutions (List.fold_right
-                        (function
-                         | (_, x) -> fun y -> Parse.Function (x, y)) arg_types value.ty) t;
-                end;
+                if recursive then
+                    new_scope := (var, t) :: !new_scope
+                else ();
+                assign_typevars value new_scope substitutions handle_top;
+                set_substitution_constraint substitutions (List.fold_right
+                    (function
+                     | (_, x) -> fun y -> Parse.Function (x, y)) arg_types value.ty) t;
                 assign_typevars context (ref ((var, t) :: !scopes)) substitutions handle_top
             end;
             set_substitution_constraint substitutions value.ty ret_type;
@@ -193,16 +191,31 @@ let rec assign_typevars (ast: Parse.ast) scopes substitutions handle_top =
             begin
                 let arg_types = List.map (fun arg -> (arg, new_type_var substitutions)) args in
                 let new_scope = ref (arg_types @ !scopes) in
-                begin
-                    if recursive then
-                        new_scope := (var, t) :: !new_scope
-                    else ();
-                    assign_typevars value new_scope substitutions handle_top;
-                    set_substitution_constraint substitutions (List.fold_right
-                        (function
-                         | (_, x) -> fun y -> Parse.Function (x, y)) arg_types value.ty) t;
-                end;
+                if recursive then
+                    new_scope := (var, t) :: !new_scope
+                else ();
+                assign_typevars value new_scope substitutions handle_top;
+                set_substitution_constraint substitutions (List.fold_right
+                    (function
+                     | (_, x) -> fun y -> Parse.Function (x, y)) arg_types value.ty) t;
                 scopes := (var, t) :: !scopes;
+                let rec helper t =
+                    match t with
+                    | Parse.TypeVar n ->
+                        let sub = List.nth !substitutions n in
+                        if !sub = Parse.Unknown then
+                            sub := t
+                        else if !sub <> t then
+                            helper !sub
+                    | Parse.TypeName (_, g) ->
+                        List.iter helper g;
+                    | Parse.Product t ->
+                        List.iter helper t;
+                    | Parse.Function (f, a) ->
+                        helper f;
+                        helper a;
+                    | _ -> ()
+                in List.iter (fun (_, t) -> helper t) arg_types;
             end;
             set_substitution_constraint substitutions value.ty ret_type;
             set_substitution_constraint substitutions ast.ty (Parse.TypeName ("unit", []));
